@@ -17,6 +17,18 @@ metadata:
     emoji: "👔"
 ---
 
+## 快速开始
+
+> 第一次使用本 skill？按这个顺序读：
+> 1. **审查严重度体系**（下面这一节）→ 理解 P0/P1/P2 分级
+> 2. **四阶段审查流程** → 理解审查的标准步骤
+> 3. **审查流程（标准操作规程）** → 实际操作时的详细步骤
+> 4. `assets/report_template.md` → 查看报告模板
+>
+> 需要专项检查时，按需加载 `references/*.md`（见「渐进式披露」章节）。
+
+---
+
 # Code Review Panel - 代码审查专家团
 
 ## 核心理念
@@ -104,7 +116,7 @@ AI 擅长生成 CRUD 和基础接口，但在**事务一致性、幂等设计、
 
 ### 阶段四：汇总与决策（Summary & Decision）
 
-- 按严重度**汇总所有问题**（📛 → 🟠 → 🟡 → 🔵 → 📚 → 🌟）
+- 按严重度**汇总所有问题**（🔴 → 🟠 → 🟡 → 🔵 → 📚 → 🌟）
 - 生成**结构化反馈**，含具体修复建议或代码示例
 - 给出**批准状态**：✅ 通过 / ⚠️ 修复后合并 / ❌ 不通过
 - 输出**行动项清单**，按优先级排序
@@ -147,14 +159,6 @@ AI 擅长生成 CRUD 和基础接口，但在**事务一致性、幂等设计、
 | **模型属性引用校验** | 代码中引用的模型属性/方法是否在对应类中真实存在？ | 高 | P0 |
 | **环境配置硬编码** | .env 中密钥/Token 是否可推测？调试模式是否开启？CORS 是否过宽？ | 高 | P0 |
 | **模板/邮件注入** | 用户输入是否直接拼入 HTML 邮件/模板而未转义？ | 高 | P0 |
-
-### 1.3 问题优先级分级
-
-| 优先级 | 定义 | 处理要求 |
-|-------|-----|---------|
-| **P0 必须修复** | 安全漏洞、数据一致性、资金安全、生产稳定性 | 阻塞上线，立即修复 |
-| **P1 强烈建议** | 并发问题、性能瓶颈、潜在 Bug | 建议本次修复，或标记为技术债 |
-| **P2 可选优化** | 代码风格、重复代码、可读性 | 可后续迭代优化 |
 
 ### 1.4 核心原则
 
@@ -544,6 +548,25 @@ WEAK_PATTERNS = [
 | 前后端契约检查 | 运行 `scripts/extract_api_endpoints.py` |
 | ORM 模型引用检查 | 运行 `scripts/check_model_attributes.py` |
 
+**示例：运行脚本提取 API 端点**
+```bash
+# 在项目根目录执行
+python scripts/extract_api_endpoints.py . -o api_endpoints.md
+
+# 查看输出
+cat api_endpoints.md
+```
+
+**示例：运行安全扫描**
+```bash
+python scripts/security_scan.py . -o security_report.md
+```
+
+**示例：运行模型属性检查**
+```bash
+python scripts/check_model_attributes.py . -o model_attrs.md
+```
+
 ---
 
 ## 审查流程（标准操作规程）
@@ -853,7 +876,7 @@ WEAK_PATTERNS = [
 | **SQLAlchemy** | `flush()` 后不 `commit()`，依赖 session yield 隐式提交 | 每个写操作显式 `commit()` |
 | **SQLAlchemy** | ORM `obj.attr += 1` 读-改-写，并发下竞态 | 用 SQL 原子操作 `UPDATE SET attr=attr+1` |
 | **FastAPI** | `Depends()` 链中多个写操作不在同一事务 | 合并为单条条件 UPDATE 或用 `with session.begin()` |
-| **Celery** | `new_event_loop()` + `run_until_complete()` | 用 `asyncio.run()` 或集成 celery-aioredis |
+| **Celery** | `new_event_loop()` + `run_until_complete()` | 用 `asyncio.run()` 或集成 celery-redis |
 | **Celery** | 任务中用 `ar.get(timeout=...)` 阻塞 worker | 用 Celery group/chord 异步编排 |
 | **Python** | 类属性行末逗号导致 tuple 赋值 | 注意 `attr = val,` 等于 `attr = (val,)` |
 | **Python** | 生成器中 `yield` 在 `try` 块内 `except pass` | 记录日志而非静默吞没 |
@@ -881,6 +904,7 @@ python scripts/extract_api_endpoints.py <项目目录> -o endpoints.md
 **在审查流程中使用**：第四步「跨文件关联性扫描 → 4.1 前后端接口契约一致性」
 
 ---
+
 ### security_scan.py
 
 **功能**：扫描项目中的常见安全问题（弱密钥、硬编码密钥、调试模式、CORS 过宽、AWS Key、私钥泄露）。
@@ -895,6 +919,7 @@ python scripts/security_scan.py <项目目录> -o security_report.md
 **在审查流程中使用**：第一步「项目结构探查」阶段执行，或单独执行安全专项审查。
 
 ---
+
 ### check_model_attributes.py
 
 **功能**：扫描 ORM 模型定义，提取所有模型和字段名，用于校验跨文件引用是否合法。
@@ -911,11 +936,49 @@ python scripts/check_model_attributes.py <项目目录> -o model_attrs.md
 **在审查流程中使用**：第四步「跨文件关联性扫描 → 4.2 模型属性引用校验」
 
 ---
+
+### review_progress.py
+
+**功能**：管理审查进度，支持断点续审。可创建进度文件、标记批次状态、恢复中断的审查。
+
+**用法**：
+```bash
+# 初始化进度文件（在项目根目录执行）
+python scripts/review_progress.py init "D:\work\code\ScanIt" python+fastapi
+
+# 添加审查批次计划
+python scripts/review_progress.py add 1 "认证授权" "auth.py,deps.py,middleware.py"
+
+# 查看当前进度
+python scripts/review_progress.py status
+
+# 标记批次开始
+python scripts/review_progress.py start 1
+
+# 标记批次完成（记录发现的问题数）
+python scripts/review_progress.py complete 1 -p0 2 -p1 1 -p2 0 -patterns "flush不commit,模型属性缺失"
+
+# 标记批次失败
+python scripts/review_progress.py fail 2 "上下文超限，需要重新开始"
+
+# 添加备注
+python scripts/review_progress.py note "发现SQLAlchemy flush/commit混淆的通用问题"
+
+# 重置进度（删除进度文件）
+python scripts/review_progress.py reset
+```
+
+**进度文件**：`.code_review_progress.json`（自动创建在项目根目录）
+
+**在审查流程中使用**：第零步「恢复进度」、每一步批次完成时更新状态。
+
+---
+
 ## 报告模板
 
 `assets/report_template.md` 提供了标准审查报告模板。
 
-输出路径：`<项目根目录>/CODE_REVIEW_REPORT_YYYYMMDD.md`
+输出路径：`<项目根目录>/CODE_REVIEW_REPORT_YYYYMMDD.md`（例如 `CODE_REVIEW_REPORT_20260514.md`）
 
 模板包含：项目概览、审查计划、P0/P1/P2 问题清单、量化指标、跨文件扫描结果、修复建议、附录（脚本使用记录）。
 
@@ -926,8 +989,8 @@ python scripts/check_model_attributes.py <项目目录> -o model_attrs.md
 | 场景 | 协作方式 |
 |-----|---------|
 | **框架反模式** | 参见 `references/framework-antipatterns.md` |
-| **代码文件编码问题** | 引用 qclaw-text-file 处理编码、换行符问题 |
-| **定时审查任务** | 引用 qclaw-cron-skill 设置定期代码审查 |
+| **代码文件编码问题** | 引用 openclaw-text-file 处理编码、换行符问题 |
+| **定时审查任务** | 引用 openclaw-cron-skill 设置定期代码审查 |
 
 ---
 

@@ -1,5 +1,10 @@
-__pycache__/
-*.pyc
-*.pyo
-.DS_Store
+﻿# Skill .gitignore
+.openclaw/
 .codebuddy/
+MEMORY.md
+memory/
+task-summary_*.md
+**/__pycache__/
+**/*.pyc
+*.log
+
