@@ -146,3 +146,29 @@
   - `scripts/extract_api_endpoints.py` — {{ENDPOINT_COUNT}} 个端点
   - `scripts/security_scan.py` — {{SECURITY_ISSUES}} 个问题
   - `scripts/check_model_attributes.py` — {{MODEL_COUNT}} 个模型
+
+---
+
+## 断点续审指南
+
+> 如审查因超时或其他原因中断，再次审查同一项目时：
+
+1. **读取进度文件**（`.code_review_progress.json`），确认已完成的批次
+2. **读取已有报告**（`CODE_REVIEW_REPORT.md`），了解已发现的问题
+3. **从最后一个未完成批次继续**，标记已完成批次为 `✅ 已完成`
+4. **新发现的问题追加**到报告，不覆盖已有内容
+5. **每完成一个批次**，更新进度文件后再继续下一个批次
+
+**中断恢复示例**：
+
+```
+上次审查状态：批次3进行到一半（detector_llm.py 已读，llm_provider/ 未读）
+
+本次操作：
+  1. 读取 .code_review_progress.json → batch=3, status=in_progress
+  2. 读取 CODE_REVIEW_REPORT.md → 已发现 7P0 + 9P1 + 5P2
+  3. 继续批次3：从 llm_provider/__init__.py 开始读取
+  4. 完成后标记 batch=3 为 completed，更新 updated_at
+  5. 继续批次4（租户管理）
+  6. 最终汇总，追加新发现的问题到报告
+```

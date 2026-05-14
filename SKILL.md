@@ -549,6 +549,94 @@ WEAK_PATTERNS = [
 ## 审查流程（标准操作规程）
 
 > 当用户请求对整个项目/仓库进行代码审查时，**必须按以下流程执行**，不得跳过任何步骤。
+> 本流程内置**进度持久化机制**，审查中断后可安全恢复，避免重复劳动。
+
+### 第零步：恢复进度（如有）
+
+**断点续审**：每次启动审查前，先检查项目根目录是否有进度文件。
+
+1. **检查进度文件**
+   ```
+   <项目根目录>/.code_review_progress.json
+   ```
+
+2. **如存在**：
+   - 读取已有批次状态和已发现问题
+   - 从**最后一个未完成的批次**继续（跳过他已完成的部分）
+   - 在报告中注明「✅ 第 X 批次已完成，发现 Y 个问题」
+   - 新发现的问题**追加**到已有报告（不覆盖）
+
+3. **如不存在**：创建新的进度文件和空白报告，从第一步开始。
+
+> ⚠️ **断点续审原则**：只要当前批次有任何实质输出（问题发现/文件读取），就把**批次状态更新写入进度文件**，再继续下一个批次。不等到整个审查完成才写入。
+
+### 进度文件格式
+
+```json
+{
+  "project": "D:\\work\\code\\ScanIt",
+  "started_at": "2026-05-14T10:00:00",
+  "updated_at": "2026-05-14T11:30:00",
+  "batches": [
+    {
+      "batch": 1,
+      "unit": "认证授权",
+      "files": ["auth.py", "deps.py", "middleware.py"],
+      "status": "completed",
+      "p0_found": 2,
+      "p1_found": 1,
+      "p2_found": 0,
+      "context_patterns": [
+        "flush vs commit 不一致",
+        "increment_quota_usage 无 commit"
+      ],
+      "completed_at": "2026-05-14T10:45:00"
+    },
+    {
+      "batch": 2,
+      "unit": "核心业务",
+      "files": ["tasks.py", "results.py", "works.py"],
+      "status": "completed",
+      "p0_found": 3,
+      "p1_found": 2,
+      "p2_found": 0,
+      "context_patterns": [
+        "Task 模型无 title/keywords 字段",
+        "Result 模型 reviewed_by/reviewed_at 字段缺失"
+      ],
+      "completed_at": "2026-05-14T11:20:00"
+    },
+    {
+      "batch": 3,
+      "unit": "LLM服务",
+      "files": ["llm.py", "detector_llm.py", "llm_provider/"],
+      "status": "in_progress",
+      "p0_found": 0,
+      "p1_found": 1,
+      "p2_found": 0,
+      "files_read": ["llm.py"],
+      "files_remaining": ["detector_llm.py", "llm_provider/__init__.py"],
+      "context_patterns": [
+        "new_event_loop() 不安全"
+      ]
+    }
+  ],
+  "total_p0": 5,
+  "total_p1": 4,
+  "total_p2": 0,
+  "report_path": "CODE_REVIEW_REPORT.md"
+}
+```
+
+**关键字段说明**：
+
+| 字段 | 说明 |
+|-----|------|
+| `status` | `pending` / `in_progress` / `completed` |
+| `context_patterns` | 本批次发现的问题模式，传播到下一批次 |
+| `files_read` | 当前批次已读取的文件（in_progress 时用） |
+| `files_remaining` | 当前批次剩余待读文件 |
+| `updated_at` | 每次批次完成时更新 |
 
 ### 第一步：项目结构探查
 
