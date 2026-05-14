@@ -969,6 +969,261 @@ python scripts/extract_business_rules.py . --language typescript # TypeScript/Ty
 
 ---
 
+## 审查历史与趋势分析
+
+> 记录每次审查结果，生成趋势图，帮助团队了解代码质量变化。
+
+### 历史目录结构
+
+```
+.code-review-history/
+  ├── 2026-05-14-initial.json       # 首次审查
+  ├── 2026-05-20-followup.json     # 第二次审查
+  ├── 2026-06-01-pre-release.json  # 发布前审查
+  ├── trend.json                    # 趋势数据汇总
+  └── trend.png                     # 趋势图（可选）
+```
+
+### 历史记录格式
+
+```json
+// 2026-05-14-initial.json
+{
+  "version": "1.0",
+  "date": "2026-05-14T10:30:00+08:00",
+  "project": "ScanIt",
+  "commit": "a1b2c3d",
+  "branch": "main",
+  "summary": {
+    "p0Count": 7,
+    "p1Count": 12,
+    "p2Count": 10,
+    "filesReviewed": 59,
+    "totalLines": 15234
+  },
+  "issues": [
+    { "id": "P0-1", "title": "JWT 密钥硬编码", "status": "OPEN" },
+    { "id": "P1-1", "title": "N+1 查询", "status": "OPEN" }
+  ]
+}
+```
+
+### 趋势数据汇总
+
+```json
+// trend.json
+{
+  "project": "ScanIt",
+  "generatedAt": "2026-06-01T15:00:00+08:00",
+  "history": [
+    { "date": "2026-05-14", "p0": 7, "p1": 12, "p2": 10 },
+    { "date": "2026-05-20", "p0": 3, "p1": 8, "p2": 9 },
+    { "date": "2026-06-01", "p0": 0, "p1": 2, "p2": 5 }
+  ],
+  "trend": {
+    "p0Change": -7,
+    "p1Change": -10,
+    "p2Change": -5,
+    "overallTrend": "IMPROVING"
+  }
+}
+```
+
+### 使用命令
+
+```bash
+# 保存当前审查到历史
+code-review-panel . --save-history
+
+# 查看趋势
+code-review-panel . --show-trend
+
+# 生成趋势图（需要 matplotlib）
+code-review-panel . --generate-trend-chart -o trend.png
+
+# 对比两次审查
+code-review-panel . --compare 2026-05-14-initial.json 2026-05-20-followup.json
+```
+
+### 趋势报告示例
+
+```markdown
+## 代码质量趋势报告
+
+### 问题数量变化
+| 日期 | P0 | P1 | P2 | 总计 |
+|------|----|----|----|----|
+| 2026-05-14 | 7 | 12 | 10 | 29 |
+| 2026-05-20 | 3 | 8 | 9 | 20 |
+| 2026-06-01 | 0 | 2 | 5 | 7 |
+
+### 趋势分析
+- ✅ P0 问题：从 7 降至 0（全部修复）
+- ✅ P1 问题：从 12 降至 2（修复 10 个）
+- ✅ P2 问题：从 10 降至 5（修复 5 个）
+- 📈 整体趋势：**持续改善**
+
+### 建议
+- 当前代码质量良好，可以上线
+- 剩余 2 个 P1 问题建议下个迭代修复
+```
+
+---
+
+## 深度模式：数据流追踪
+
+> 开启 `--deep` 模式后，进行跨文件数据流分析，追踪敏感数据和权限链路。
+
+### 追踪维度
+
+| 追踪类型 | 说明 | 检测目标 |
+|---------|------|---------|
+| **敏感数据流** | 用户输入 → 存储 → 响应 | 数据泄露、未脱敏 |
+| **权限链路** | 路由 → 依赖 → 数据查询 | 越权访问 |
+| **错误处理链** | 异常抛出 → 捕获 → 响应 | 异常吞没、敏感信息泄露 |
+| **事务边界** | 开始 → 操作 → 提交/回滚 | 事务不一致 |
+
+### 敏感数据流追踪
+
+```
+用户输入
+    ↓
+API 端点
+    ↓
+参数校验 ← 校验通过？
+    ↓
+存储到数据库 ← 是否脱敏？
+    ↓
+返回响应 ← 是否包含敏感字段？
+```
+
+**追踪示例**：
+
+```markdown
+## 敏感数据流追踪：用户手机号
+
+### 数据流路径
+1. **输入**：`POST /api/users` → `phone: "13800138000"`
+2. **存储**：`users.phone = phone`（未脱敏）
+3. **查询**：`GET /api/users/{id}` → 返回完整手机号
+4. **问题**：⚠️ 手机号未脱敏直接存储和返回
+
+### 建议修复
+- 存储：`users.phone = mask_phone(phone)` → `138****8000`
+- 返回：`UserResponse.phone` 使用脱敏字段
+```
+
+### 权限链路追踪
+
+```
+路由定义
+    ↓
+依赖注入
+    ↓
+获取当前用户
+    ↓
+检查权限 ← 权限校验存在？
+    ↓
+数据查询 ← 是否有 tenant_id 过滤？
+    ↓
+返回结果 ← 是否越权？
+```
+
+**追踪示例**：
+
+```markdown
+## 权限链路追踪：DELETE /api/tasks/{id}
+
+### 链路分析
+1. **路由**：`@router.delete("/tasks/{id}")`
+2. **依赖**：`current_user = Depends(get_current_user)`
+3. **权限检查**：❌ 未检查 `current_user` 是否有删除权限
+4. **数据查询**：`task = await db.get(Task, id)`
+5. **租户隔离**：❌ 未检查 `task.tenant_id == current_user.tenant_id`
+6. **风险**：⚠️ 任意用户可删除任意任务（越权）
+
+### 建议修复
+```python
+# 添加租户隔离检查
+task = await db.execute(
+    select(Task).where(
+        Task.id == id,
+        Task.tenant_id == current_user.tenant_id
+    )
+)
+if not task:
+    raise HTTPException(404, "Task not found")
+```
+```
+
+### 错误处理链追踪
+
+```markdown
+## 错误处理链追踪：支付流程
+
+### 链路分析
+1. **入口**：`POST /api/payments`
+2. **异常抛出**：`PaymentGatewayError("连接超时")`
+3. **捕获**：`except Exception as e: logger.error(e)`
+4. **响应**：`{"detail": "内部错误"}`
+5. **问题**：⚠️ 异常被吞没，未返回具体错误信息给调用方
+
+### 建议修复
+```python
+try:
+    result = await payment_gateway.process(payment)
+except PaymentGatewayError as e:
+    logger.error(f"Payment failed: {e}")
+    raise HTTPException(502, f"支付网关错误: {e}")
+```
+```
+
+### 使用方法
+
+```bash
+# 开启深度模式
+code-review-panel . --deep
+
+# 只追踪敏感数据流
+code-review-panel . --deep --track sensitive-data
+
+# 只追踪权限链路
+code-review-panel . --deep --track permission
+
+# 只追踪错误处理
+code-review-panel . --deep --track error-handling
+
+# 只追踪事务边界
+code-review-panel . --deep --track transaction
+```
+
+### 深度模式输出格式
+
+```markdown
+## 深度分析报告
+
+### 敏感数据流追踪
+| 数据类型 | 入口 | 存储是否脱敏 | 响应是否脱敏 | 风险等级 |
+|---------|-----|------------|------------|---------|
+| 手机号 | POST /users | ❌ | ❌ | 🔴 P0 |
+| 邮箱 | POST /users | ❌ | ✅ | 🟡 P2 |
+| 密码 | POST /auth/login | ✅ | ✅ | ✅ 安全 |
+
+### 权限链路追踪
+| 端点 | 鉴权 | 租户隔离 | 越权风险 |
+|-----|-----|---------|---------|
+| DELETE /tasks/{id} | ✅ | ❌ | 🔴 P0 |
+| GET /results | ✅ | ✅ | ✅ 安全 |
+
+### 错误处理链追踪
+| 模块 | 异常捕获 | 错误传递 | 问题 |
+|-----|---------|---------|-----|
+| 支付 | ❌ 吞没 | ❌ | 🟠 P1 |
+| 认证 | ✅ | ✅ | ✅ 正确 |
+```
+
+---
+
 ## 协作语气指南
 
 > 审查评论的语气直接影响团队协作效率。参考 `references/code-review-best-practices.md`（完整沟通指南）。
